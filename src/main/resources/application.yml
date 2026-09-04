@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: recruitment-system
+
+  # ---- 寄信（Gmail SMTP + 應用程式密碼）----
+  # 帳號密碼一律走環境變數，勿寫死於版控。
+  # 使用者需於 Google 帳號開啟兩步驟驗證後產生「應用程式密碼」，設為 MAIL_PASSWORD。
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:chifang.cf.chung@gmail.com}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
+
+  datasource:
+    url: jdbc:h2:mem:recruitment;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  h2:
+    console:
+      enabled: true        # http://localhost:8080/h2-console (JDBC URL 同上)
+      path: /h2-console
+
+  jpa:
+    hibernate:
+      # Schema 由附檔 SQL 建立，Hibernate 不自動建表
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: false
+
+  sql:
+    init:
+      mode: always
+      # 先跑附檔 DDL＋假資料，再校正 IDENTITY 起始值
+      schema-locations:
+        - classpath:db/sql_script.sql
+        - classpath:db/reset-identity.sql
+      encoding: UTF-8
+
+server:
+  port: 8080
+
+# ---- 應用層寄信設定 ----
+# from：寄件者顯示信箱（Gmail SMTP 會以驗證帳號為準，通常等於 MAIL_USERNAME）。
+# enabled：true 才真的寄；未設 MAIL_PASSWORD 時自動退回「僅記 log」模式，不會噴錯。
+app:
+  mail:
+    from: ${MAIL_FROM:chifang.cf.chung@gmail.com}
+    enabled: ${MAIL_ENABLED:true}
+
+logging:
+  level:
+    com.hytech.recruitment: INFO

@@ -1,0 +1,139 @@
+### 招募系統 API 範例請求（VS Code REST Client / IntelliJ HTTP Client）
+@base = http://localhost:8080/api/v1
+
+### 邀約列表
+GET {{base}}/invitations
+
+### 依狀態查詢
+GET {{base}}/invitations?status=COMMUNICATING&page=0&size=20
+
+### 單筆
+GET {{base}}/invitations/1
+
+### 三個月防重複檢查（同名＋手機；無手機則同名＋信箱。王小明已於近期發過一面邀請 → duplicate=true）
+GET {{base}}/invitations/check-duplicate?name=王小明&phone=0912-345-678
+
+### 建立邀約（新 email → 201）
+POST {{base}}/invitations
+Content-Type: application/json
+
+{
+  "name": "測試人員",
+  "email": "tester.new@example.invalid",
+  "phone": "0900-000-000",
+  "channel": "104邀約",
+  "jobTitle": "Java軟體工程師"
+}
+# 註：性別／上機考題目／面試地點屬「基本資料」，改由 HR 於面試安排 basic-info 填
+
+### 欄位級更新（只改 phone）
+PATCH {{base}}/invitations/1
+Content-Type: application/json
+
+{ "phone": "0912-000-111" }
+
+### 綠色流程：陳志豪(3, COMMUNICATING) → 時間確認中
+POST {{base}}/invitations/3/confirm-time
+
+### → 確認面試
+POST {{base}}/invitations/3/confirm-interview
+
+### HR「排面試時間」單一動作：時間＋基本資料（性別／上機考題目／面試地點，皆下拉）
+### 面試安排 id=1 對應 invitation 3；資料齊備且已確認面試時自動觸發寄信（CC 選定主管）
+PATCH {{base}}/arrangements/1/interview-time
+Content-Type: application/json
+
+{ "interviewTime": "2026-12-15T10:00:00", "gender": "MALE", "examType": "基本", "location": "南港" }
+
+### 排面試時間：基本資料非法值 → 400 VALIDATION_ERROR（examType 僅 基本/AI）
+PATCH {{base}}/arrangements/1/interview-time
+Content-Type: application/json
+
+{ "interviewTime": "2026-12-16T10:00:00", "examType": "無" }
+
+### 排面試時間：排定過去時間 → 400（interviewTime 不可為過去）
+PATCH {{base}}/arrangements/1/interview-time
+Content-Type: application/json
+
+{ "interviewTime": "2020-01-01T10:00:00" }
+
+### 主管填白名單欄位（OK）：可面試日期可換行（\n 分行，一主管一行）＋主管備註
+PATCH {{base}}/arrangements/2/manager-fields
+Content-Type: application/json
+
+{ "interviewManager": "Sherry/John", "managerPreferredDates": "Sherry 9/5 下午、9/8 上午\nJohn 9/10 下午、9/11 上午", "managerRemark": "優先給 Sherry 面試" }
+
+### 主管寫非白名單欄位 → 403 FIELD_NOT_WRITABLE_BY_ROLE
+PATCH {{base}}/arrangements/1/manager-fields
+Content-Type: application/json
+
+{ "interviewTime": "2026-09-20T09:00:00" }
+
+### 排面試時間：多位主管時帶入單一主管（寄信只 CC 該位，忽略大小寫）
+PATCH {{base}}/arrangements/2/interview-time
+Content-Type: application/json
+
+{ "interviewTime": "2026-12-18T10:00:00", "selectedManager": "John" }
+
+### 排面試時間：selectedManager 不在清單 → 422 MANAGER_SELECTION_REQUIRED
+PATCH {{base}}/arrangements/2/interview-time
+Content-Type: application/json
+
+{ "interviewTime": "2026-12-18T10:00:00", "selectedManager": "Ghost" }
+
+### 觸發寄信（examType/location/性別/職稱皆取自面試安排；範本鍵 基本×南港×資深Java軟體工程師 → SUCCESS）
+POST {{base}}/invitations/3/trigger-mail
+Content-Type: application/json
+
+{ "formLink": "https://drive.example.invalid/form/3" }
+
+### 寄信必填欄位缺漏（面試安排未填 性別/上機考題目/面試地點）→ 422 MAIL_REQUIRED_FIELDS_MISSING
+POST {{base}}/invitations/1/trigger-mail
+Content-Type: application/json
+
+{ }
+
+### 查寄信結果（含 ccManagerEmail＝面試主管信箱）
+GET {{base}}/mail-records?invitationId=3
+
+### 冪等：林品妤(4) 已 SUCCESS，再觸發 → 直接回既存 SUCCESS（不重寄）
+POST {{base}}/invitations/4/trigger-mail
+Content-Type: application/json
+
+{ }
+
+### 範本清單
+GET {{base}}/mail-templates?location=南港
+
+### 面試安排列表（依主管）
+GET {{base}}/arrangements?manager=Sherry
+
+### 結果：確認面試者 → 錄取人選（發出聘約）
+POST {{base}}/invitations/4/result
+Content-Type: application/json
+
+{ "result": "OFFER_EXTENDED" }
+
+### 錄取人選 → 接受聘約
+POST {{base}}/invitations/4/result
+Content-Type: application/json
+
+{ "result": "OFFER_ACCEPTED" }
+
+### 編輯結果（手動調整狀態）：接受聘約後反悔 → 黑名單（理由選填，寫入婉拒原因）
+POST {{base}}/invitations/4/result
+Content-Type: application/json
+
+{ "result": "BLACKLIST", "reason": "人選來電反悔、放棄報到" }
+
+### 無故缺席快捷（確認面試者未出席）→ 黑名單（無 body）
+POST {{base}}/invitations/4/blacklist
+
+### 非法：尚未確認面試（id 1 為 EMAIL_CONTACT）就設定結果 → 422 ILLEGAL_STATE_TRANSITION
+POST {{base}}/invitations/1/result
+Content-Type: application/json
+
+{ "result": "OFFER_EXTENDED" }
+
+### 非法狀態轉移（已終止的再走主線 → 422）
+POST {{base}}/invitations/5/confirm-time

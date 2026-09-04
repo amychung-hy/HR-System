@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>邀約紀錄 · 招募系統</title>
+<style>
+  :root{
+    /* 狀態碼顏色 —— 依 API 規格書 ContactStatus 定義 */
+    --st-EMAIL_CONTACT:#2563eb;          /* 信件聯繫（藍） */
+    --st-SECOND_INVITE_PENDING:#cbd2de;  /* 二次邀約未回覆（淺灰） */
+    --st-COMMUNICATING:#15803d;          /* 信件溝通中（綠） */
+    --st-TIME_CONFIRMING:#e0670a;        /* 時間確認中（橘） */
+    --st-INTERVIEW_CONFIRMED:#d21f3c;    /* 確認面試（紅） */
+    --st-OFFER_EXTENDED:#b0790d;         /* 錄取人選（金） */
+    --st-OFFER_ACCEPTED:#d69be0;         /* 接受聘約（紫） */
+    --st-THANKS_LETTER:#5a6577;          /* 感謝函 */
+    --st-BLACKLIST:#1f2430;              /* 黑名單 */
+    --st-DECLINED:#9aa2b1;               /* 婉拒 */
+
+    --bg:#f4f5f8; --surface:#ffffff; --ink:#1f2430; --muted:#667085;
+    --line:#dfe3ec; --line-strong:#c7cdda; --head:#eef1f7;
+    --accent:#2563eb; --accent-ink:#1d4ed8;
+    --danger:#d21f3c; --ok:#15803d;
+    --sans:"Segoe UI","PingFang TC","Microsoft JhengHei",system-ui,-apple-system,sans-serif;
+    --mono:ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:13px}
+  .wrap{max-width:1480px;margin:0 auto;padding:18px 20px 48px}
+
+  /* 頂部導覽 */
+  .topbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+  .brand{display:flex;align-items:baseline;gap:10px}
+  .brand h1{font-size:19px;margin:0;font-weight:700}
+  .brand .sub{color:var(--muted);font-size:12.5px}
+  .nav{display:flex;gap:4px;background:#e7ebf3;padding:4px;border-radius:10px}
+  .nav a{padding:6px 14px;border-radius:7px;text-decoration:none;color:#41495c;font-weight:600;font-size:12.5px}
+  .nav a.active{background:#fff;color:var(--accent-ink);box-shadow:0 1px 2px rgba(16,24,40,.08)}
+  .nav a{transition:background .12s,color .12s}
+  .nav a:not(.active):hover{background:rgba(255,255,255,.6);color:var(--accent-ink)}
+  .spacer{margin-left:auto}
+
+  .btn{font:inherit;font-weight:600;cursor:pointer;border-radius:8px;padding:8px 14px;border:1px solid var(--line-strong);
+       background:#fff;color:var(--ink);display:inline-flex;align-items:center;gap:6px;transition:.12s}
+  .btn:hover{border-color:var(--accent);color:var(--accent-ink)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:var(--accent-ink);color:#fff}
+  .btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+  .btn.danger:hover{filter:brightness(.92);color:#fff}
+  .btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+  .btn.ok:hover{filter:brightness(.92);color:#fff}
+  .btn.sm{padding:5px 11px;font-size:12px;border-radius:7px}
+  /* 內嵌配色（inline style）按鈕：其 border/color 會蓋過 .btn:hover，改以微幅變暗做 hover 回饋 */
+  .btn[style*="background"]:hover{filter:brightness(.92)}
+  .btn:disabled,.btn[style*="background"]:disabled:hover{opacity:.5;cursor:not-allowed;filter:none}
+
+  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 12px}
+  .toolbar input,.toolbar select{
+    font:inherit;padding:7px 10px;border:1px solid var(--line-strong);border-radius:7px;background:#fff;color:var(--ink)}
+  .toolbar input{min-width:220px}
+  .toolbar .count{margin-left:auto;color:var(--muted);font-size:12.5px}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:2px 0 14px}
+  .legend .item{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .legend .dot{width:12px;height:12px;border-radius:3px;flex:none;border:1px solid rgba(0,0,0,.08)}
+
+  .grid{overflow:auto;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);
+        box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  table{border-collapse:separate;border-spacing:0;width:100%;white-space:nowrap;min-width:1180px}
+  th,td{padding:9px 12px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);text-align:left;vertical-align:middle}
+  th{position:sticky;top:0;z-index:2;background:var(--head);font-weight:600;color:#3a4256;
+     border-bottom:1px solid var(--line-strong);cursor:default}
+  th:first-child,td:first-child{position:sticky;left:0;z-index:1;background:var(--head)}
+  td:first-child{background:#fafbfd;color:var(--muted);font-variant-numeric:tabular-nums}
+  th:first-child{z-index:3}
+  th:last-child,td:last-child{position:sticky;right:0;background:var(--head);border-right:none}
+  td:last-child{background:#fafbfd}
+  tbody tr:hover td{background:#f3f7ff}
+  tbody tr:hover td:first-child,tbody tr:hover td:last-child{background:#eaf0fb}
+  td.num{font-variant-numeric:tabular-nums;color:var(--muted)}
+  td.mono{font-family:var(--mono);font-size:12px;color:#475067}
+
+  .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;
+         color:#fff;line-height:1.5;white-space:nowrap}
+  .badge[data-light="1"]{color:#333a47}
+
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+  .banner{margin:0 0 12px;padding:8px 12px;border-radius:8px;background:#fff7e6;border:1px solid #f2d98a;
+          color:#7a5b00;font-size:12.5px;display:none}
+  footer{margin-top:18px;color:var(--muted);font-size:11.5px}
+
+  /* 遮罩 + 對話框 / 抽屜 */
+  .mask{position:fixed;inset:0;background:rgba(20,26,40,.42);display:none;z-index:40}
+  .mask.show{display:block}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:460px;max-width:94vw;background:var(--surface);
+          box-shadow:-6px 0 24px rgba(16,24,40,.16);transform:translateX(100%);transition:transform .22s ease;
+          z-index:50;display:flex;flex-direction:column}
+  .drawer.show{transform:translateX(0)}
+  .dialog{position:fixed;top:50%;left:50%;transform:translate(-50%,-46%);width:520px;max-width:94vw;max-height:90vh;
+          overflow:auto;background:var(--surface);border-radius:14px;box-shadow:0 20px 50px rgba(16,24,40,.28);
+          z-index:50;opacity:0;pointer-events:none;transition:.16s}
+  .dialog.show{opacity:1;pointer-events:auto;transform:translate(-50%,-50%)}
+  .dhead{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--line)}
+  .dhead h2{margin:0;font-size:16px;font-weight:700}
+  .dhead .x{margin-left:auto;cursor:pointer;border:none;background:none;font-size:20px;color:var(--muted);line-height:1;padding:2px 6px;border-radius:6px}
+  .dhead .x:hover{background:var(--head);color:var(--ink)}
+  .dbody{padding:18px 20px;overflow:auto}
+  .drawer .dbody{flex:1}
+
+  .sect{margin-bottom:22px}
+  .sect h3{margin:0 0 10px;font-size:12.5px;font-weight:700;color:#41495c;letter-spacing:.02em;
+           text-transform:uppercase;display:flex;align-items:center;gap:8px}
+  .sect h3::after{content:"";flex:1;height:1px;background:var(--line)}
+  .field{margin-bottom:11px}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  .field label .req{color:var(--danger)}
+  .field .err-msg{color:var(--danger);font-size:11.5px;margin-top:4px;display:none}
+  .field .err-msg.show{display:block}
+  .field input.invalid{border-color:var(--danger)}
+  .field input,.field select,.field textarea{
+    width:100%;font:inherit;padding:8px 10px;border:1px solid var(--line-strong);border-radius:7px;background:#fff;color:var(--ink)}
+  .field textarea{min-height:64px;resize:vertical}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+  .actions{display:flex;flex-wrap:wrap;gap:8px}
+  .actbox{border:1px solid var(--line);border-radius:10px;padding:14px;background:#fbfcfe;margin-bottom:12px}
+  .actbox .hint{color:var(--muted);font-size:12px;margin:0 0 10px;line-height:1.55}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:12.5px;margin-bottom:2px}
+  .kv dt{color:var(--muted)} .kv dd{margin:0}
+  .terminal-note{padding:14px;border-radius:10px;background:var(--head);color:var(--muted);font-size:12.5px;text-align:center}
+
+  /* toast */
+  #toasts{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:80;display:flex;flex-direction:column;gap:8px;align-items:center}
+  .toast{padding:10px 16px;border-radius:9px;font-size:13px;font-weight:600;color:#fff;box-shadow:0 6px 18px rgba(16,24,40,.22);animation:pop .18s}
+  .toast.ok{background:var(--ok)} .toast.err{background:var(--danger)} .toast.info{background:#334155}
+  @keyframes pop{from{opacity:0;transform:translateY(6px)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand"><h1>邀約紀錄</h1><span class="sub">招募系統 · Invitation Records</span></div>
+    <nav class="nav">
+      <a href="index.html" class="active">邀約紀錄</a>
+      <a href="arrangements.html">面試安排</a>
+    </nav>
+    <div class="spacer"></div>
+    <button class="btn primary" id="btnNew">＋ 新增求職者</button>
+  </div>
+
+  <div id="banner" class="banner"></div>
+
+  <div class="legend" id="legend"></div>
+
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="搜尋姓名 / Email / 職位 / 管道…">
+    <select id="statusFilter"><option value="">全部狀態</option></select>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="grid">
+    <table>
+      <thead>
+        <tr>
+          <th>編號</th>
+          <th>邀請人</th>
+          <th>狀態</th>
+          <th>姓名</th>
+          <th>職位名稱</th>
+          <th>招募管道</th>
+          <th>履歷編號</th>
+          <th>E-Mail</th>
+          <th>手機</th>
+          <th>一面邀請時間</th>
+          <th>二邀時間</th>
+          <th>最終結果</th>
+          <th>備註</th>
+          <th>更新時間</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <footer id="foot"></footer>
+</div>
+
+<!-- 遮罩 -->
+<div class="mask" id="mask"></div>
+
+<!-- 新增求職者對話框 -->
+<div class="dialog" id="dlgNew" role="dialog" aria-modal="true">
+  <div class="dhead"><h2>新增求職者</h2><button class="x" data-close>×</button></div>
+  <div class="dbody">
+    <form id="formNew" novalidate>
+      <div class="row2">
+        <div class="field"><label>姓名 <span class="req">*</span></label><input name="name" id="n_name"><div class="err-msg" id="err_name"></div></div>
+        <div class="field"><label>E-Mail <span class="req">*</span></label><input name="email" id="n_email" type="email"><div class="err-msg" id="err_email"></div></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>手機</label><input name="phone" id="n_phone" placeholder="0912345678"><div class="err-msg" id="err_phone"></div></div>
+        <div class="field"><label>履歷編號</label><input name="resumeNo" id="n_resumeNo" placeholder="104招募管道需填編號"><div class="err-msg" id="err_resumeNo"></div></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>招募管道 <span class="req">*</span></label><input name="channel" id="n_channel" placeholder="104邀約 / 緯育TibaME / 員工推薦…"><div class="err-msg" id="err_channel"></div></div>
+        <div class="field"><label>職位名稱 <span class="req">*</span></label><input name="jobTitle" id="n_jobTitle" placeholder="Java軟體工程師"><div class="err-msg" id="err_jobTitle"></div></div>
+      </div>
+      <div class="field"><label>邀請人 <span class="req">*</span></label><input name="inviter" id="n_inviter" placeholder="HR，例：amy.chung"><div class="err-msg" id="err_inviter"></div></div>
+      <div class="actions" style="justify-content:flex-end">
+        <button type="button" class="btn" data-close>取消</button>
+        <button type="submit" class="btn primary">建立</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 明細 / 操作抽屜 -->
+<div class="drawer" id="drawer" role="dialog" aria-modal="true">
+  <div class="dhead">
+    <h2 id="drTitle">求職者明細</h2>
+    <span id="drBadge"></span>
+    <button class="x" data-close>×</button>
+  </div>
+  <div class="dbody" id="drBody"></div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+/* ---------- 狀態定義 ---------- */
+const STATUS = {
+  EMAIL_CONTACT:         {label:"信件聯繫",       color:"#2563eb"},
+  SECOND_INVITE_PENDING: {label:"二次邀約未回覆", color:"#cbd2de", light:true},
+  COMMUNICATING:         {label:"信件溝通中",     color:"#15803d"},
+  TIME_CONFIRMING:       {label:"時間確認中",     color:"#e0670a"},
+  INTERVIEW_CONFIRMED:   {label:"確認面試",       color:"#d21f3c"},
+  OFFER_EXTENDED:        {label:"錄取人選",       color:"#b0790d"},
+  OFFER_ACCEPTED:        {label:"接受聘約",       color:"#d69be0"},
+  THANKS_LETTER:         {label:"感謝函",         color:"#5a6577"},
+  BLACKLIST:             {label:"黑名單",         color:"#1f2430"},
+  DECLINED:              {label:"婉拒",           color:"#9aa2b1", light:true},
+};
+const GENDER = {MALE:"男", FEMALE:"女"};
+const TERMINAL = new Set(["OFFER_ACCEPTED","THANKS_LETTER","BLACKLIST","DECLINED"]);
+/* 最終結果（流程結束）：接受聘約／感謝函／婉拒／黑名單。錄取人選(OFFER_EXTENDED)為過渡、非最終結果。 */
+const FINAL_RESULTS = ["OFFER_ACCEPTED","THANKS_LETTER","DECLINED","BLACKLIST"];
+
+/* 依 StatusMachine 的合法轉移（供離線示範模式用） */
+const TRANSITIONS = {
+  EMAIL_CONTACT:["SECOND_INVITE_PENDING","COMMUNICATING"],
+  SECOND_INVITE_PENDING:["COMMUNICATING","DECLINED"],
+  COMMUNICATING:["TIME_CONFIRMING","DECLINED"],
+  TIME_CONFIRMING:["INTERVIEW_CONFIRMED","DECLINED"],
+  INTERVIEW_CONFIRMED:["OFFER_EXTENDED","THANKS_LETTER","BLACKLIST"],
+  OFFER_EXTENDED:["OFFER_ACCEPTED","DECLINED"],
+};
+
+/* 內建示範資料（對應 db/sql_script.sql，無後端時使用） */
+const SEED = [
+  {id:1,name:"王小明",email:"ming.wang@example.invalid",phone:"0912-345-678",inviter:"amy.chung",resumeNo:"R104-20260901",channel:"104邀約",jobTitle:"Java軟體工程師",contactStatus:"EMAIL_CONTACT",inviteSentAt:"2026-09-01T09:00:00",secondInviteAt:null,declineReason:null,result:null,createdAt:"2026-09-01T09:00:00"},
+  {id:2,name:"李佳穎",email:"jiaying.li@example.invalid",phone:"0922-111-222",inviter:"john.lee",resumeNo:null,channel:"緯育TibaME",jobTitle:"C#.Net實習生",contactStatus:"SECOND_INVITE_PENDING",inviteSentAt:"2026-09-01T09:30:00",secondInviteAt:"2026-09-02T10:00:00",declineReason:null,result:null,createdAt:"2026-09-01T09:30:00"},
+  {id:3,name:"陳志豪",email:"zhihao.chen@example.invalid",phone:"0933-333-444",inviter:"amy.chung",resumeNo:"R104-20260828",channel:"104主動應徵",jobTitle:"資深Java軟體工程師",contactStatus:"COMMUNICATING",inviteSentAt:"2026-08-28T10:00:00",secondInviteAt:null,declineReason:null,result:null,createdAt:"2026-08-28T10:00:00"},
+  {id:4,name:"林品妤",email:"pinyu.lin@example.invalid",phone:"0955-666-777",inviter:"grace.cheng",resumeNo:null,channel:"員工推薦",jobTitle:"SA系統分析師",contactStatus:"INTERVIEW_CONFIRMED",inviteSentAt:"2026-08-25T14:00:00",secondInviteAt:null,declineReason:null,result:null,createdAt:"2026-08-25T14:00:00"},
+  {id:5,name:"張書瑋",email:"shuwei.chang@example.invalid",phone:"0966-888-999",inviter:"amy.chung",resumeNo:null,channel:"CakeResume",jobTitle:"軟體測試工程師",contactStatus:"OFFER_EXTENDED",inviteSentAt:"2026-08-10T11:00:00",secondInviteAt:null,declineReason:null,result:null,createdAt:"2026-08-10T11:00:00"},
+];
+
+let rows = [];
+let OFFLINE = false;
+let currentId = null;
+
+/* ---------- 小工具 ---------- */
+const $ = s => document.querySelector(s);
+function toast(msg, kind="info"){
+  const t = document.createElement("div");
+  t.className = "toast "+kind; t.textContent = msg;
+  $("#toasts").appendChild(t);
+  setTimeout(()=>t.remove(), 3200);
+}
+function badge(code){
+  const s = STATUS[code] || {label:code||"—", color:"#9aa2b1", light:true};
+  const light = s.light ? ' data-light="1"' : '';
+  return `<span class="badge"${light} style="background:${s.color}">${s.label}</span>`;
+}
+function fmtDate(v){
+  if(!v) return '<span style="color:#b6bccb">—</span>';
+  const d = new Date(v);
+  if(isNaN(d)) return v;
+  const p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+const dash = v => v ? v : '<span style="color:#b6bccb">—</span>';
+const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* 二邀時間欄：已寄二邀→顯示二邀寄送時間；一邀超過 24hr 未寄二邀且尚未回覆→「需要二邀」；其餘→— */
+function secondInviteCell(r){
+  if(r.secondInviteAt) return fmtDate(r.secondInviteAt);
+  const over24h = r.inviteSentAt && (Date.now() - new Date(r.inviteSentAt).getTime() >= 24*3600*1000);
+  if(r.contactStatus==="EMAIL_CONTACT" && over24h){
+    return '<span style="display:inline-block;border:1px solid #f2a0b4;background:#fdeef2;color:#c02a4d;padding:1px 9px;border-radius:20px;font-weight:700;font-size:11px">需要二邀</span>';
+  }
+  return '<span style="color:#b6bccb">—</span>';
+}
+
+/* ---------- API 呼叫（統一信封）---------- */
+async function api(method, path, body){
+  const opt = {method, headers:{}};
+  if(body !== undefined){ opt.headers["Content-Type"]="application/json"; opt.body=JSON.stringify(body); }
+  const res = await fetch("/api/v1"+path, opt);
+  let json = null;
+  try{ json = await res.json(); }catch(e){}
+  if(!res.ok || (json && json.success === false)){
+    const err = json && json.error ? json.error : {message:"HTTP "+res.status};
+    const e = new Error(err.message || err.code || ("HTTP "+res.status));
+    e.code = err.code; e.extras = err;
+    throw e;
+  }
+  return json ? json.data : null;
+}
+
+/* ---------- 建立圖例與篩選 ---------- */
+function buildLegendAndFilter(){
+  const legend = $("#legend"), sel = $("#statusFilter");
+  for (const [code, s] of Object.entries(STATUS)){
+    const item = document.createElement("span");
+    item.className = "item";
+    item.innerHTML = `<span class="dot" style="background:${s.color}"></span>${s.label}`;
+    legend.appendChild(item);
+    const opt = document.createElement("option");
+    opt.value = code; opt.textContent = `${s.label}（${code}）`;
+    sel.appendChild(opt);
+  }
+}
+
+/* ---------- 列表渲染 ---------- */
+function render(){
+  const q = $("#q").value.trim().toLowerCase();
+  const sf = $("#statusFilter").value;
+  const tbody = $("#tbody");
+  const view = rows.filter(r=>{
+    if(sf && r.contactStatus !== sf) return false;
+    if(q){
+      const hay = `${r.name||""} ${r.email||""} ${r.jobTitle||""} ${r.channel||""} ${r.resumeNo||""}`.toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  $("#count").textContent = `共 ${view.length} 筆` + (view.length!==rows.length ? `（總 ${rows.length}）` : "");
+  if(view.length === 0){
+    tbody.innerHTML = `<tr><td colspan="15" class="empty">查無符合條件的資料</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = view.map(r=>`
+    <tr>
+      <td class="num">${r.id}</td>
+      <td class="mono">${dash(esc(r.inviter))}</td>
+      <td>${badge(r.contactStatus)}</td>
+      <td>${dash(esc(r.name))}</td>
+      <td>${dash(esc(r.jobTitle))}</td>
+      <td>${dash(esc(r.channel))}</td>
+      <td class="mono">${dash(esc(r.resumeNo))}</td>
+      <td class="mono">${dash(esc(r.email))}</td>
+      <td class="mono">${dash(esc(r.phone))}</td>
+      <td>${fmtDate(r.inviteSentAt)}</td>
+      <td>${secondInviteCell(r)}</td>
+      <td>${r.result ? badge(r.result) : '<span style="color:#b6bccb">—</span>'}</td>
+      <td>${dash(esc(r.declineReason))}</td>
+      <td>${fmtDate(r.updatedAt || r.createdAt)}</td>
+      <td><button class="btn sm" data-manage="${r.id}">管理</button></td>
+    </tr>`).join("");
+  tbody.querySelectorAll("[data-manage]").forEach(b=>{
+    b.addEventListener("click", ()=>openDrawer(Number(b.dataset.manage)));
+  });
+}
+
+/* ---------- 遮罩/彈窗控制 ---------- */
+function openMask(){ $("#mask").classList.add("show"); }
+function closeAll(){
+  $("#mask").classList.remove("show");
+  $("#drawer").classList.remove("show");
+  $("#dlgNew").classList.remove("show");
+  currentId = null;
+}
+$("#mask").addEventListener("click", closeAll);
+document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click", closeAll));
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeAll(); });
+
+/* ---------- 新增求職者 ---------- */
+$("#btnNew").addEventListener("click", ()=>{
+  $("#formNew").reset();
+  clearNewErrors();
+  openMask(); $("#dlgNew").classList.add("show");
+});
+/* 使用者重新輸入即清除該欄錯誤 */
+["name","email","phone","resumeNo","channel","jobTitle","inviter"].forEach(f=>{
+  const inp=$("#n_"+f);
+  if(inp) inp.addEventListener("input", ()=>setErr("n_"+f,"err_"+f,""));
+});
+/* 改動招募管道也一併清除履歷編號的條件式錯誤 */
+$("#n_channel").addEventListener("input", ()=>setErr("n_resumeNo","err_resumeNo",""));
+$("#formNew").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const req = {
+    name:v(fd.get("name")), email:v(fd.get("email")), phone:v(fd.get("phone")),
+    resumeNo:v(fd.get("resumeNo")), channel:v(fd.get("channel")), jobTitle:v(fd.get("jobTitle")),
+    inviter:v(fd.get("inviter"))
+  };
+
+  // 欄位檢核：未填／格式錯誤一律於輸入欄下方顯示紅字（不跳彈跳視窗、不讓儲存）
+  const REQ = "此為必填欄位，請勿空白";
+  const phoneDigits = req.phone ? req.phone.replace(/\D/g,"") : "";
+  let bad = false;
+  bad = setErr("n_name","err_name", req.name ? "" : REQ) || bad;
+  const emailMsg = !req.email ? REQ
+    : (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(req.email) ? "E-Mail 格式錯誤" : "");
+  bad = setErr("n_email","err_email", emailMsg) || bad;
+  // 手機為選填；有填則須為 09 開頭共 10 碼
+  const phoneMsg = (req.phone && !/^09\d{8}$/.test(phoneDigits)) ? "格式錯誤，手機須為 09 開頭共 10 碼" : "";
+  bad = setErr("n_phone","err_phone", phoneMsg) || bad;
+  bad = setErr("n_channel","err_channel", req.channel ? "" : REQ) || bad;
+  // 招募管道含「104」→ 履歷編號不可空白
+  const need104 = req.channel && req.channel.includes("104");
+  bad = setErr("n_resumeNo","err_resumeNo", (need104 && !req.resumeNo) ? REQ : "") || bad;
+  bad = setErr("n_jobTitle","err_jobTitle", req.jobTitle ? "" : REQ) || bad;
+  bad = setErr("n_inviter","err_inviter", req.inviter ? "" : REQ) || bad;
+  if(bad){ const f=document.querySelector("#formNew .invalid"); if(f) f.focus(); return; }
+
+  try{
+    let created;
+    if(OFFLINE){
+      const fphone = phoneDigits ? fmtPhone(phoneDigits) : null;
+      dupCheckLocal(req.name, req.email, fphone);
+      const id = Math.max(0,...rows.map(r=>r.id))+1;
+      const now = new Date().toISOString();
+      created = {id, ...req, phone:fphone, inviter:req.inviter||"amy.chung",
+        resumeLink:`https://drive.example.invalid/resume/${id}`, contactStatus:"EMAIL_CONTACT",
+        inviteSentAt:null, secondInviteAt:null, declineReason:null, result:null, createdAt:now, updatedAt:now};
+      rows.unshift(created);
+      toast("已建立（示範模式）","ok");
+    }else{
+      created = await api("POST","/invitations",req);
+      await load(true);
+      toast("已建立求職者邀約紀錄","ok");
+    }
+    render(); closeAll();
+  }catch(err){
+    const extra = err.extras && err.extras.existingInvitationId ? `（既有編號 #${err.extras.existingInvitationId}）` : "";
+    toast((err.message||"建立失敗")+extra, "err");
+  }
+});
+function v(x){ x=(x||"").trim(); return x===""?null:x; }
+/* 10 碼數字 → 0966-888-999（4-3-3） */
+function fmtPhone(d){ return d.slice(0,4)+"-"+d.slice(4,7)+"-"+d.slice(7); }
+/* 欄位驗證錯誤：於輸入欄下方顯示紅字、輸入框標紅（不跳彈跳視窗）。msg 為空＝清除。回傳是否有錯。 */
+function setErr(inputId, errId, msg){
+  const inp=$("#"+inputId), el=$("#"+errId);
+  if(el){ if(msg){ el.textContent=msg; el.classList.add("show"); } else { el.classList.remove("show"); } }
+  if(inp) inp.classList.toggle("invalid", !!msg);
+  return !!msg;
+}
+/* 清除新增求職者表單所有欄位錯誤 */
+function clearNewErrors(){
+  ["name","email","phone","resumeNo","channel","jobTitle","inviter"].forEach(f=>setErr("n_"+f,"err_"+f,""));
+}
+/* 離線示範防重複：有手機→同名＋同手機；無手機→同名＋同信箱；限近 90 天內曾發送一面邀請者 */
+function dupCheckLocal(name, email, phone){
+  const since = Date.now()-90*864e5;
+  const hit = rows.find(r=>{
+    if(!(r.inviteSentAt && new Date(r.inviteSentAt).getTime()>=since)) return false;
+    if(r.name !== name) return false;
+    return phone ? (r.phone===phone) : (!!email && r.email===email);
+  });
+  if(hit){
+    const e=new Error(phone ? "此人 90 天內已發送一面邀請（同名＋同手機）"
+                            : "此人 90 天內已發送一面邀請（同名＋同信箱）");
+    e.extras={existingInvitationId:hit.id}; throw e;
+  }
+}
+
+/* ---------- 抽屜：明細 + 手動輸入 + 狀態流轉 ---------- */
+function openDrawer(id){
+  currentId = id;
+  const r = rows.find(x=>x.id===id);
+  if(!r) return;
+  $("#drTitle").textContent = `#${r.id} ${r.name||""}`;
+  $("#drBadge").innerHTML = badge(r.contactStatus);
+  $("#drBody").innerHTML = drawerBody(r);
+  wireDrawer(r);
+  openMask(); $("#drawer").classList.add("show");
+}
+
+function drawerBody(r){
+  return `
+  <!-- 手動輸入欄位 -->
+  <div class="sect">
+    <h3>邀約資料</h3>
+    <div class="field"><label>姓名</label><input id="f_name" value="${esc(r.name)}"></div>
+    <div class="field"><label>E-Mail</label><input id="f_email" value="${esc(r.email)}"></div>
+    <div class="row2">
+      <div class="field"><label>手機</label><input id="f_phone" value="${esc(r.phone)}"></div>
+      <div class="field"><label>履歷編號</label><input id="f_resumeNo" value="${esc(r.resumeNo)}"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>招募管道</label><input id="f_channel" value="${esc(r.channel)}"></div>
+      <div class="field"><label>職位名稱</label><input id="f_jobTitle" value="${esc(r.jobTitle)}"></div>
+    </div>
+    <div class="actions" style="justify-content:flex-end"><button class="btn primary sm" id="btnSaveFields">儲存欄位</button></div>
+  </div>
+
+  <!-- 聯繫狀態流轉 -->
+  <div class="sect">
+    <h3>更新聯繫狀態</h3>
+    <div class="kv">
+      <dt>目前狀態</dt><dd>${badge(r.contactStatus)}</dd>
+      <dt>一面邀請</dt><dd>${fmtDate(r.inviteSentAt)}</dd>
+      <dt>二邀時間</dt><dd>${fmtDate(r.secondInviteAt)}</dd>
+    </div>
+    <div style="height:10px"></div>
+    ${statusActions(r)}
+  </div>`;
+}
+
+/* 依目前狀態列出可用動作 */
+function statusActions(r){
+  const s = r.contactStatus;
+  if(TERMINAL.has(s)){
+    let extra = "";
+    if(r.result) extra += `<div class="kv"><dt>最終結果</dt><dd>${badge(r.result)}</dd></div>`;
+    if(r.declineReason) extra += `<div class="kv"><dt>備註</dt><dd>${esc(r.declineReason)}</dd></div>`;
+    // 終止狀態仍提供「調整狀態」：例如接受聘約後反悔，HR 手動改列黑名單
+    return `<div class="terminal-note">此為終止狀態，流程已結束。</div>${extra}${editResultBox()}`;
+  }
+  let html = "";
+  if(s==="EMAIL_CONTACT"){
+    const sent = r.inviteSentAt;
+    const over24 = sent && (Date.now() - new Date(sent).getTime() >= 24*3600*1000);
+    if(!sent){
+      html += actBox("確認寄送邀請",
+        "HR 於其他平台（104／Email 等）寄出一面邀請後，點此記錄一面邀請時間（系統不代寄信）。",
+        `<button class="btn ok sm" data-act="send-invite">確認寄送邀請</button>`);
+    }else if(!over24){
+      html += actBox("確認寄送邀請",
+        `已於 ${fmtDate(sent)} 記錄一面邀請時間；未滿 24 小時，暫不可再邀。`,
+        `<button class="btn ok sm" disabled>確認寄送邀請</button>`);
+    }else{
+      html += actBox("確認寄送二次邀約",
+        "逾 24 小時未回覆。HR 於其他平台寄出二次邀約後，點此記錄二邀時間。",
+        `<button class="btn sm" data-act="second-invite" style="background:#e0670a;border-color:#e0670a;color:#fff">確認寄送二次邀約</button>`);
+    }
+    html += actBox("確認人選意願","人選回覆有意願，轉交主管評估。",
+      `<button class="btn ok sm" data-act="reply-received">轉交主管</button>`);
+  }
+  if(s==="SECOND_INVITE_PENDING"){
+    html += actBox("確認人選意願","二邀後人選回覆有意願，轉交主管評估。",
+      `<button class="btn ok sm" data-act="reply-received">轉交主管</button>`);
+    html += declineBox();
+  }
+  if(s==="COMMUNICATING"){
+    html += actBox("協調面試時間","HR 至 104 與求職者協調中。",
+      `<button class="btn sm" data-act="confirm-time" style="background:#e0670a;border-color:#e0670a;color:#fff">至104確認時間 → 時間確認中</button>`);
+    html += declineBox();
+  }
+  if(s==="TIME_CONFIRMING"){
+    html += actBox("求職者確認","求職者回覆並確認面試時間。",
+      `<button class="btn danger sm" data-act="confirm-interview">求職者確認 → 確認面試</button>`);
+    html += declineBox();
+  }
+  if(s==="INTERVIEW_CONFIRMED"){
+    html += actBox("面試結果","錄取人選或不錄取人選。",
+      `<div class="actions">
+         <button class="btn sm" data-act="result" data-result="OFFER_EXTENDED" style="background:#b0790d;border-color:#b0790d;color:#fff">錄取（發錄取通知）</button>
+         <button class="btn sm" data-act="result" data-result="THANKS_LETTER" style="background:#5a6577;border-color:#5a6577;color:#fff">未錄取（發感謝函）</button>
+       </div>`);
+    html += actBox("無故缺席","面試當日未出席 → 列入黑名單。",
+      `<div class="field"><label>理由（選填）</label><textarea id="a_noshowReason" placeholder="例：面試當日未到、未事先告知"></textarea></div>
+       <button class="btn sm" data-act="result" data-result="BLACKLIST" data-reason-field="a_noshowReason" style="background:#1f2430;border-color:#1f2430;color:#fff">黑名單</button>`);
+  }
+  if(s==="OFFER_EXTENDED"){
+    html += actBox("聘約回覆","人選回覆是否接受聘約。",
+      `<button class="btn sm" data-act="result" data-result="OFFER_ACCEPTED" style="background:#d69be0;border-color:#d69be0;color:#3b1f43">接受聘約</button>
+       <div class="field" style="margin-top:12px"><label>婉拒理由（選填）</label>
+         <textarea id="a_offerReason" placeholder="例：人選另有選擇、拒絕本聘約"></textarea></div>
+       <button class="btn sm" data-act="result" data-result="DECLINED" data-reason-field="a_offerReason" style="background:#9aa2b1;border-color:#9aa2b1;color:#333a47">婉拒聘約</button>`);
+  }
+  // 每種狀態的最下方都提供「調整狀態」，以因應例外情況
+  html += editResultBox();
+  return html;
+}
+/* 調整狀態：預設收合，點「調整狀態」按鈕才展開。可調整為四個最終結果（接受聘約／感謝函／婉拒／黑名單），黑名單／婉拒理由選填。 */
+function editResultBox(){
+  const opts = FINAL_RESULTS.map(c=>`<option value="${c}">${STATUS[c].label}</option>`).join("");
+  return `<div class="actbox">
+    <button class="btn sm" id="btnToggleAdjust" type="button" style="background:#334155;border-color:#334155;color:#fff">調整狀態</button>
+    <div id="adjustPanel" style="margin-top:12px" hidden>
+      <p class="hint">提供手動調整狀態，以因應例外情況。</p>
+      <div class="field"><label>調整為</label><select id="a_editTarget">${opts}</select></div>
+      <div class="field"><label>理由（選填）</label>
+        <textarea id="a_editReason" placeholder="例：人選來電反悔、放棄報到"></textarea></div>
+      <button class="btn sm" data-act="result" data-target-select="a_editTarget" data-reason-field="a_editReason" style="background:#334155;border-color:#334155;color:#fff">儲存調整</button>
+    </div>
+  </div>`;
+}
+function actBox(title, hint, inner){
+  return `<div class="actbox"><div style="font-weight:700;font-size:12.5px;margin-bottom:4px">${title}</div>
+          <p class="hint">${hint}</p>${inner}</div>`;
+}
+function declineBox(){
+  return actBox("婉拒","主管逾 7 天未挑、卡關、人選婉拒。",
+    `<div class="field"><label>婉拒原因（留空則以按鈕分類為原因）</label>
+       <textarea id="a_declineReason" placeholder="例：人選已找到工作 / 主管逾期未挑選"></textarea></div>
+     <div class="actions">
+       <button class="btn sm" data-act="decline" data-reason-default="人選婉拒" style="background:#9aa2b1;border-color:#9aa2b1;color:#333a47">人選婉拒</button>
+       <button class="btn sm" data-act="decline" data-reason-default="主管不邀約" style="background:#9aa2b1;border-color:#9aa2b1;color:#333a47">主管不邀約</button>
+     </div>`);
+}
+
+/* 綁定抽屜內互動 */
+function wireDrawer(r){
+  $("#btnSaveFields").addEventListener("click", ()=>saveFields(r.id));
+  const tg = $("#btnToggleAdjust");
+  if(tg){ tg.addEventListener("click", ()=>{ const p=$("#adjustPanel"); if(p) p.hidden = !p.hidden; }); }
+  $("#drBody").querySelectorAll("[data-act]").forEach(b=>{
+    b.addEventListener("click", ()=>runAction(r.id, b.dataset.act, b));
+  });
+}
+
+async function saveFields(id){
+  const req = {
+    name:val("f_name"), email:val("f_email"), phone:val("f_phone"),
+    resumeNo:val("f_resumeNo"), channel:val("f_channel"), jobTitle:val("f_jobTitle")
+  };
+  try{
+    if(OFFLINE){
+      Object.assign(rows.find(x=>x.id===id), req);
+      toast("已儲存（示範模式）","ok");
+    }else{
+      const updated = await api("PATCH","/invitations/"+id, req);
+      replaceRow(updated);
+      toast("欄位已更新","ok");
+    }
+    render(); openDrawer(id);
+  }catch(err){ toast(err.message||"儲存失敗","err"); }
+}
+function val(id){ const el=$("#"+id); if(!el) return null; const t=el.value.trim(); return t===""?null:t; }
+
+async function runAction(id, act, btn){
+  let path = "/invitations/"+id+"/"+act, body;
+  if(act==="reply-received"){ body = {}; }
+  if(act==="decline"){
+    // 婉拒原因選填：留空則以按鈕分類（人選婉拒／主管不邀約）為原因
+    const reason = val("a_declineReason") || btn.dataset.reasonDefault || null;
+    body = {declineReason:reason};
+  }
+  if(act==="result"){
+    let target = btn.dataset.result;
+    if(!target && btn.dataset.targetSelect) target = val(btn.dataset.targetSelect);
+    if(!target){ toast("請選擇要調整的結果","err"); return; }
+    const reason = btn.dataset.reasonField ? val(btn.dataset.reasonField) : null;
+    body = {result:target, reason:reason};
+  }
+  try{
+    if(OFFLINE){
+      applyActionLocal(id, act, body, btn);
+      toast("已更新（示範模式）","ok");
+    }else{
+      const updated = await api("POST", path, body);
+      replaceRow(updated);
+      toast(actionMsg(act),"ok");
+    }
+    render();
+    const still = rows.find(x=>x.id===id);
+    if(still) openDrawer(id);
+  }catch(err){ toast(err.message||"操作失敗","err"); }
+}
+function actionMsg(act){
+  return ({"send-invite":"已記錄一面邀請時間","second-invite":"已記錄二邀，轉為二次邀約未回覆","reply-received":"已轉交主管評估（信件溝通中）",
+    "confirm-time":"已轉為時間確認中","confirm-interview":"已轉為確認面試","decline":"已婉拒",
+    "blacklist":"已列入黑名單","result":"已更新最終結果"})[act] || "已更新";
+}
+function applyActionLocal(id, act, body){
+  const r = rows.find(x=>x.id===id);
+  const now = new Date().toISOString();
+  if(act==="send-invite") r.inviteSentAt = now;
+  else if(act==="second-invite"){ r.secondInviteAt = now; r.contactStatus = "SECOND_INVITE_PENDING"; }
+  else if(act==="reply-received") r.contactStatus = "COMMUNICATING";
+  else if(act==="confirm-time") r.contactStatus = "TIME_CONFIRMING";
+  else if(act==="confirm-interview") r.contactStatus = "INTERVIEW_CONFIRMED";
+  else if(act==="decline"){ r.contactStatus="DECLINED"; r.declineReason=body.declineReason; }
+  else if(act==="blacklist"){ r.contactStatus="BLACKLIST"; r.result="BLACKLIST"; }
+  else if(act==="result"){
+    r.contactStatus=body.result;
+    r.result=(body.result==="OFFER_EXTENDED")?null:body.result;
+    r.declineReason=(body.result==="BLACKLIST"||body.result==="DECLINED")?(body.reason||null):null;
+  }
+  r.updatedAt = now;
+}
+function replaceRow(updated){
+  const i = rows.findIndex(x=>x.id===updated.id);
+  if(i>=0) rows[i]=updated; else rows.unshift(updated);
+}
+
+/* ---------- 載入 ---------- */
+async function load(silent){
+  const banner = $("#banner");
+  try{
+    const data = await api("GET","/invitations?page=0&size=200");
+    rows = (data && data.content) ? data.content : (Array.isArray(data)?data:[]);
+    OFFLINE = false; banner.style.display="none";
+  }catch(e){
+    if(!OFFLINE){
+      rows = JSON.parse(JSON.stringify(SEED))
+        .map(r=>({resumeLink:`https://drive.example.invalid/resume/${r.id}`, ...r}));
+    }
+    OFFLINE = true;
+    banner.style.display = "block";
+    banner.textContent = `⚠ 未連到後端 API（${e.message}）——目前為示範模式，操作僅存在於畫面。啟動 Spring Boot 後重新整理即可連動真實資料。`;
+  }
+  if(!silent) render();
+}
+
+buildLegendAndFilter();
+$("#q").addEventListener("input", render);
+$("#statusFilter").addEventListener("change", render);
+$("#foot").textContent = "";
+load();
+</script>
+</body>
+</html>
